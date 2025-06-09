@@ -95,7 +95,11 @@ void s2s_scsiInquiry()
 	uint8_t evpd = scsiDev.cdb[1] & 1; // enable vital product data.
 	uint8_t pageCode = scsiDev.cdb[2];
 	uint32_t allocationLength = scsiDev.cdb[4];
+	uint8_t i;
+	uint8_t evpd_match;
+	uint8_t evpd_exists;
 
+	
 	// SASI standard, X3T9.3_185_RevE  states that 0 == 256 bytes
 	// BUT SCSI 2 standard says 0 == 0.
 	if (scsiDev.compatMode <= COMPAT_SCSI1) // excludes COMPAT_SCSI2_DISABLED
@@ -124,47 +128,77 @@ void s2s_scsiInquiry()
 			scsiDev.phase = DATA_IN;
 		}
 	}
-	else if (pageCode == 0x00)
-	{
-		memcpy(scsiDev.data, SupportedVitalPages, sizeof(SupportedVitalPages));
-		scsiDev.dataLen = sizeof(SupportedVitalPages);
-		scsiDev.phase = DATA_IN;
-	}
-	else if (pageCode == 0x80)
-	{
-		memcpy(scsiDev.data, UnitSerialNumber, sizeof(UnitSerialNumber));
-		scsiDev.dataLen = sizeof(UnitSerialNumber);
-        const S2S_TargetCfg* config = scsiDev.target->cfg;
-        memcpy(&scsiDev.data[4], config->serial, sizeof(config->serial));
-		scsiDev.phase = DATA_IN;
-	}
-	else if (pageCode == 0x81)
-	{
-		memcpy(
-			scsiDev.data,
-			ImpOperatingDefinition,
-			sizeof(ImpOperatingDefinition));
-		scsiDev.dataLen = sizeof(ImpOperatingDefinition);
-		scsiDev.phase = DATA_IN;
-	}
-	else if (pageCode == 0x82)
-	{
-		memcpy(
-			scsiDev.data,
-			AscImpOperatingDefinition,
-			sizeof(AscImpOperatingDefinition));
-		scsiDev.dataLen = sizeof(AscImpOperatingDefinition);
-		scsiDev.phase = DATA_IN;
-	}
-	else
-	{
-		// error.
-		scsiDev.status = CHECK_CONDITION;
-		scsiDev.target->sense.code = ILLEGAL_REQUEST;
-		scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
-		scsiDev.phase = STATUS;
-	}
+	else {//EVPD
+		const S2S_TargetCfg* config = scsiDev.target->cfg;
+		evpd_match=0;
+		evpd_exists=0;
+        
 
+		for(i=0;i<16;i++) {
+			if(custom_evpd[i][0]==(config->scsiId & 7) && custom_evpd[i][2]) {
+				evpd_exists=1;//something is set for this id.
+				if(custom_evpd[i][1]==pageCode) {
+					evpd_match=1;
+					memcpy(scsiDev.data, custom_evpd[i]+3, custom_evpd[i][2]);
+					scsiDev.dataLen = custom_evpd[i][2];					
+					scsiDev.phase = DATA_IN;
+				}			
+			}
+		}
+		
+		
+		if(evpd_exists && !evpd_match) {						
+			scsiDev.status = CHECK_CONDITION;
+			scsiDev.target->sense.code = ILLEGAL_REQUEST;
+			scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+			scsiDev.phase = STATUS;			
+		} 		
+		else if(evpd_exists && evpd_match) {
+			//
+		}
+		else { // Standard EVPD
+			if (pageCode == 0x00)
+			{
+				memcpy(scsiDev.data, SupportedVitalPages, sizeof(SupportedVitalPages));
+				scsiDev.dataLen = sizeof(SupportedVitalPages);
+				scsiDev.phase = DATA_IN;
+			}
+			else if (pageCode == 0x80)
+			{
+				memcpy(scsiDev.data, UnitSerialNumber, sizeof(UnitSerialNumber));
+				scsiDev.dataLen = sizeof(UnitSerialNumber);
+				const S2S_TargetCfg* config = scsiDev.target->cfg;
+				memcpy(&scsiDev.data[4], config->serial, sizeof(config->serial));
+				scsiDev.phase = DATA_IN;
+			}
+			else if (pageCode == 0x81)
+			{
+				memcpy(
+					scsiDev.data,
+					ImpOperatingDefinition,
+					sizeof(ImpOperatingDefinition));
+				scsiDev.dataLen = sizeof(ImpOperatingDefinition);
+				scsiDev.phase = DATA_IN;
+			}
+			else if (pageCode == 0x82)
+			{
+				memcpy(
+					scsiDev.data,
+					AscImpOperatingDefinition,
+					sizeof(AscImpOperatingDefinition));
+				scsiDev.dataLen = sizeof(AscImpOperatingDefinition);
+				scsiDev.phase = DATA_IN;
+			}
+			else
+			{
+				// error.
+				scsiDev.status = CHECK_CONDITION;
+				scsiDev.target->sense.code = ILLEGAL_REQUEST;
+				scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+				scsiDev.phase = STATUS;
+			}
+		}
+	}
 
 	if (scsiDev.phase == DATA_IN)
 	{

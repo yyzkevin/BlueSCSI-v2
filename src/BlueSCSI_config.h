@@ -6,6 +6,8 @@
 #include <string.h>
 #include <BlueSCSI_platform.h>
 
+extern unsigned char custom_evpd[16][255];//this is the wrong place but i gave up trying to do it any other way.
+
 // Use variables for version number
 #define FW_VER_NUM      "2024.12.09"
 #define FW_VER_SUFFIX   "dev" // 3 char only - 'dev' or 'rel'
@@ -96,3 +98,4 @@ int getImgDir(int scsiId, char* dirname, size_t dname_len);
 int getImg(int scsiId, int img_index, char* filename, size_t fname_len);
 
 int getToolBoxSharedDir(char * dir_name);
+

@@ -221,12 +221,54 @@ const char * quirksToChar(int quirks)
   }
 }
 
+
+bool processEvpd() {
+  char tmp[1024];//more memory waste
+  char tmp2[1024];
+  char *end;
+  char *ptr;
+  int counter;
+  int count;
+  char id[6];
+  char evpd[7];
+
+  int ids,entries;
+
+  //id page len content
+  counter=0;
+  for(ids=0;ids<8;ids++) {
+    for(entries=0;entries<0xFF;entries++) {
+      sprintf(id,"SCSI%u",ids);
+      sprintf(evpd,"evpd%02x",entries);      
+      if(ini_gets(id,evpd, "", tmp, sizeof(tmp), CONFIGFILE)) {        
+        ptr = tmp;
+        count=0;
+        while (*ptr != '\0') {
+          custom_evpd[counter][3+(count++)] = strtol(ptr, &end, 16);
+          ptr = end;
+          while (*ptr == ' ' || *ptr == ',') ptr++;  // skip whitespace or commas
+        }
+        custom_evpd[counter][0]=ids;
+        custom_evpd[counter][1]=entries;
+        custom_evpd[counter][2]=count-1;
+        sprintf(tmp2,"set %u/%u index: %u  size: %u",ids,entries,counter,count);
+        log(tmp2);
+        counter++;        
+      }
+    }
+  }
+  
+  return 0;
+}
+
 // Iterate over the root path in the SD card looking for candidate image files.
 bool findHDDImages()
 {
   char imgdir[MAX_FILE_PATH];
   ini_gets("SCSI", "Dir", "/", imgdir, sizeof(imgdir), CONFIGFILE);
   int dirindex = 0;
+  
+  processEvpd();
 
   log(" ");
   log("=== Finding images in ", imgdir, " ===");

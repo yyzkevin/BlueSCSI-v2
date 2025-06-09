@@ -20,6 +20,8 @@
 #include "minIni.h"
 #include "BlueSCSI_config.h"
 
+unsigned char custom_evpd[16][255];//this is the wrong place but i gave up trying to do it any other way.
+
 int getBlockSize(char *filename, int scsiId, int default_size)
 {
   char section[6] = "SCSI0";
@@ -31,7 +33,7 @@ int getBlockSize(char *filename, int scsiId, int default_size)
   if (blksize)
   {
     int blktmp = strtoul(blksize + 1, NULL, 10);
-    if (blktmp == 256 || blktmp == 512 || blktmp == 1024 ||
+    if (blktmp == 256 || blktmp == 512 || blktmp == 520 || blktmp == 1024 ||
         blktmp == 2048 || blktmp == 4096 || blktmp == 8192)
     {
       return blktmp;

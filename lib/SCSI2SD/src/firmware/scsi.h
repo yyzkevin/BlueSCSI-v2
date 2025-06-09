@@ -82,7 +82,7 @@ typedef enum
 #endif
 
 #ifndef SCSI2SD_BUFFER_SIZE
-#define SCSI2SD_BUFFER_SIZE (MAX_SECTOR_SIZE * 8)
+#define SCSI2SD_BUFFER_SIZE 120*520//66520//(MAX_SECTOR_SIZE * 8)
 #endif
 
 // Shadow parameters, possibly not saved to flash yet.
@@ -113,7 +113,7 @@ typedef struct
 	uint8_t syncPeriod;
 
 	bool started; // Controlled by START STOP UNIT
-} TargetState;
+}  TargetState;
 
 typedef struct
 {
@@ -125,8 +125,7 @@ typedef struct
 	TargetState targets[S2S_MAX_TARGETS];
 	TargetState* target;
 	S2S_BoardCfg boardCfg;
-
-
+	
 	// Set to true (1) if the ATN flag was set, and we need to
 	// enter the MESSAGE_OUT phase.
 	int atnFlag;

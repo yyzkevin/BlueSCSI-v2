@@ -30,7 +30,7 @@
 #endif
 
 #if !defined INI_BUFFERSIZE
-  #define INI_BUFFERSIZE  512
+  #define INI_BUFFERSIZE  1024
 #endif
 
 #if defined __cplusplus

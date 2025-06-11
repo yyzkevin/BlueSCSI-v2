@@ -20,7 +20,9 @@
 #include "minIni.h"
 #include "BlueSCSI_config.h"
 
-unsigned char custom_evpd[16][255];//this is the wrong place but i gave up trying to do it any other way.
+unsigned char custom_vpd[16][255];//this is the wrong place but i gave up trying to do it any other way.
+unsigned char custom_spd[8][255];
+
 
 int getBlockSize(char *filename, int scsiId, int default_size)
 {

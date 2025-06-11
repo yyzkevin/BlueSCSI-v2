@@ -1607,7 +1607,7 @@ void diskDataOut()
         platform_poll();
         diskEjectButtonUpdate(false);
 
-        // Figure out how many contiguous bytes are available for writing to SD card.
+        // Figure out how many contiguous bytes are available for writing to SD card
         uint32_t bufsize = sizeof(scsiDev.data);
         uint32_t start = g_disk_transfer.bytes_sd % bufsize;
         uint32_t len = 0;
@@ -1620,17 +1620,18 @@ void diskDataOut()
         // Count number of finished sectors
         if (scsiIsReadFinished(&scsiDev.data[start + available - 1]))
         {
-            len = available;
+            len = available;            
         }
         else
         {
             while (len < available && scsiIsReadFinished(&scsiDev.data[start + len + SD_SECTOR_SIZE - 1]))
             {
-                len += SD_SECTOR_SIZE;
+                len += SD_SECTOR_SIZE;            
             }
         }
 
         // In case the last sector is partial (256 byte SCSI sectors)
+        
         if (len > available)
         {
             len = available;
@@ -1642,7 +1643,7 @@ void diskDataOut()
             len = PLATFORM_OPTIMAL_MAX_SD_WRITE_SIZE;
         }
 
-        uint32_t remain_in_transfer = g_disk_transfer.bytes_scsi - g_disk_transfer.bytes_sd;
+        uint32_t remain_in_transfer = g_disk_transfer.bytes_scsi - g_disk_transfer.bytes_sd;       
         if (len < bufsize - start && len < remain_in_transfer)
         {
             // Use large write blocks in middle of transfer and smaller at the end of transfer.
@@ -2096,6 +2097,18 @@ int scsiDiskCommand()
             scsiDev.cdb[8];
 
         scsiDiskStartWrite(lba, blocks);
+    }
+    else if (likely(command == 0x41)) // Write Same(10)
+    {
+        uint32_t lba =
+            (((uint32_t) scsiDev.cdb[2]) << 24) +
+            (((uint32_t) scsiDev.cdb[3]) << 16) +
+            (((uint32_t) scsiDev.cdb[4]) << 8) +
+            scsiDev.cdb[5];
+        uint32_t blocks =
+            (((uint32_t) scsiDev.cdb[7]) << 8) +
+            scsiDev.cdb[8];
+        //scsiDiskStartWriteSame(lba,blocks);
     }
     else if (unlikely(command == 0x04))
     {

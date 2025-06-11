@@ -96,8 +96,9 @@ void s2s_scsiInquiry()
 	uint8_t pageCode = scsiDev.cdb[2];
 	uint32_t allocationLength = scsiDev.cdb[4];
 	uint8_t i;
-	uint8_t evpd_match;
-	uint8_t evpd_exists;
+	uint8_t vpd_match;
+	uint8_t vpd_exists;
+	uint8_t spd_exists;
 
 	
 	// SASI standard, X3T9.3_185_RevE  states that 0 == 256 bytes
@@ -106,6 +107,8 @@ void s2s_scsiInquiry()
 	{
 		if (allocationLength == 0) allocationLength = 256;
 	}
+	
+	spd_exists=0;
 
 	if (!evpd)
 	{
@@ -120,40 +123,48 @@ void s2s_scsiInquiry()
 		else
 		{
 			const S2S_TargetCfg* config = scsiDev.target->cfg;
-			scsiDev.dataLen =
-				s2s_getStandardInquiry(
-					config,
-					scsiDev.data,
-					sizeof(scsiDev.data));
-			scsiDev.phase = DATA_IN;
+			if(custom_spd[config->scsiId & 7][0]) {
+				spd_exists=1;
+				memcpy(scsiDev.data, custom_spd[config->scsiId & 7]+1, custom_spd[config->scsiId & 7][0]);
+					scsiDev.dataLen = custom_spd[config->scsiId & 7][0];					
+					scsiDev.phase = DATA_IN;
+			}
+			else {
+				scsiDev.dataLen =
+					s2s_getStandardInquiry(
+						config,
+						scsiDev.data,
+						sizeof(scsiDev.data));
+				scsiDev.phase = DATA_IN;
+			}				
 		}
 	}
 	else {//EVPD
 		const S2S_TargetCfg* config = scsiDev.target->cfg;
-		evpd_match=0;
-		evpd_exists=0;
+		vpd_match=0;
+		vpd_exists=0;
         
 
 		for(i=0;i<16;i++) {
-			if(custom_evpd[i][0]==(config->scsiId & 7) && custom_evpd[i][2]) {
-				evpd_exists=1;//something is set for this id.
-				if(custom_evpd[i][1]==pageCode) {
-					evpd_match=1;
-					memcpy(scsiDev.data, custom_evpd[i]+3, custom_evpd[i][2]);
-					scsiDev.dataLen = custom_evpd[i][2];					
+			if(custom_vpd[i][0]==(config->scsiId & 7) && custom_vpd[i][2]) {
+				vpd_exists=1;//something is set for this id.
+				if(custom_vpd[i][1]==pageCode) {
+					vpd_match=1;
+					memcpy(scsiDev.data, custom_vpd[i]+3, custom_vpd[i][2]);
+					scsiDev.dataLen = custom_vpd[i][2];					
 					scsiDev.phase = DATA_IN;
 				}			
 			}
 		}
 		
 		
-		if(evpd_exists && !evpd_match) {						
+		if(vpd_exists && !vpd_match) {						
 			scsiDev.status = CHECK_CONDITION;
 			scsiDev.target->sense.code = ILLEGAL_REQUEST;
 			scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
 			scsiDev.phase = STATUS;			
 		} 		
-		else if(evpd_exists && evpd_match) {
+		else if(vpd_exists && vpd_match) {
 			//
 		}
 		else { // Standard EVPD
@@ -200,69 +211,72 @@ void s2s_scsiInquiry()
 		}
 	}
 
-	if (scsiDev.phase == DATA_IN)
+	if(!spd_exists && !vpd_exists)  //If custom SPD was provided do not do anything.
 	{
-		// VAX workaround
-		if (allocationLength == 255 &&
-			(scsiDev.target->cfg->quirks & S2S_CFG_QUIRKS_VMS))
+		if (scsiDev.phase == DATA_IN)
 		{
-			allocationLength = 254;
+			// VAX workaround
+			if (allocationLength == 255 &&
+				(scsiDev.target->cfg->quirks & S2S_CFG_QUIRKS_VMS))
+			{
+				allocationLength = 254;
+			}
+
+			// "real" hard drives send back exactly allocationLength bytes, padded
+			// with zeroes. This only seems to happen for Inquiry responses, and not
+			// other commands that also supply an allocation length such as Mode Sense or
+			// Request Sense.
+			// (See below for exception to this rule when 0 allocation length)
+			if (scsiDev.dataLen < allocationLength)
+			{
+				memset(
+					&scsiDev.data[scsiDev.dataLen],
+					0,
+					allocationLength - scsiDev.dataLen);
+			}
+			// Spec 8.2.5 requires us to simply truncate the response if it's
+			// too big.
+			scsiDev.dataLen = allocationLength;
+
+			// Set the device type as needed.
+			scsiDev.data[0] = getDeviceTypeQualifier();
+
+			switch (scsiDev.target->cfg->deviceType)
+			{
+			case S2S_CFG_OPTICAL:
+				scsiDev.data[1] |= 0x80; // Removable bit.
+				break;
+
+			case S2S_CFG_SEQUENTIAL:
+				scsiDev.data[1] |= 0x80; // Removable bit.
+				break;
+
+			case S2S_CFG_MO:
+				scsiDev.data[1] |= 0x80; // Removable bit.
+				break;
+
+			case S2S_CFG_FLOPPY_14MB:
+			case S2S_CFG_REMOVEABLE:
+			case S2S_CFG_ZIP100:
+				scsiDev.data[1] |= 0x80; // Removable bit.
+				break;
+
+			case S2S_CFG_NETWORK:
+				scsiDev.data[2] = 0x01;  // Page code.
+				break;
+
+			default:
+				// Accept defaults for a fixed disk.
+				break;
+			}
 		}
 
-		// "real" hard drives send back exactly allocationLength bytes, padded
-		// with zeroes. This only seems to happen for Inquiry responses, and not
-		// other commands that also supply an allocation length such as Mode Sense or
-		// Request Sense.
-		// (See below for exception to this rule when 0 allocation length)
-		if (scsiDev.dataLen < allocationLength)
+		// Set the first byte to indicate LUN presence.
+		if (scsiDev.lun) // We only support lun 0
 		{
-			memset(
-				&scsiDev.data[scsiDev.dataLen],
-				0,
-				allocationLength - scsiDev.dataLen);
+			scsiDev.data[0] = 0x7F;
 		}
-		// Spec 8.2.5 requires us to simply truncate the response if it's
-		// too big.
-		scsiDev.dataLen = allocationLength;
-
-		// Set the device type as needed.
-		scsiDev.data[0] = getDeviceTypeQualifier();
-
-		switch (scsiDev.target->cfg->deviceType)
-		{
-		case S2S_CFG_OPTICAL:
-			scsiDev.data[1] |= 0x80; // Removable bit.
-			break;
-
-		case S2S_CFG_SEQUENTIAL:
-			scsiDev.data[1] |= 0x80; // Removable bit.
-			break;
-
-		case S2S_CFG_MO:
-			scsiDev.data[1] |= 0x80; // Removable bit.
-			break;
-
-		case S2S_CFG_FLOPPY_14MB:
-		case S2S_CFG_REMOVEABLE:
-		case S2S_CFG_ZIP100:
-			scsiDev.data[1] |= 0x80; // Removable bit.
-			break;
-
-		case S2S_CFG_NETWORK:
-			scsiDev.data[2] = 0x01;  // Page code.
-			break;
-
-		default:
-			// Accept defaults for a fixed disk.
-			break;
-		}
-	}
-
-	// Set the first byte to indicate LUN presence.
-	if (scsiDev.lun) // We only support lun 0
-	{
-		scsiDev.data[0] = 0x7F;
-	}
+	}	
 }
 
 uint32_t s2s_getStandardInquiry(

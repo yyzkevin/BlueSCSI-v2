@@ -88,11 +88,6 @@ struct image_config_t: public S2S_TargetCfg
     // Warning about geometry settings
     bool geometrywarningprinted;
 
-    // Custom EVPD
-    int custom_evpd_count;
-	unsigned char custom_evpd[16][255];//this is terrible use of memory I know.
-
-
     // Clear any image state to zeros
     void clear();
 

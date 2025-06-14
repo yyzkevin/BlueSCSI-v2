@@ -1631,9 +1631,9 @@ void diskDataOut()
     uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;
     uint32_t i;
     
-    uint16_t blocks_written;
-    uint16_t blocks_to_write;
-    uint16_t blocks_per_buffer;
+    uint32_t blocks_written;
+    uint32_t blocks_to_write;
+    uint32_t blocks_per_buffer;
     uint32_t bw;
 
     g_disk_transfer.buffer = scsiDev.data;
@@ -1738,11 +1738,11 @@ void diskDataOut()
                     memcpy(working_buffer + (i*bytesPerSector),buf,bytesPerSector);
                 }
                 blocks_written=0;
-                bw=0;
-                while(blocks_written < g_disk_transfer.writesame_count) {
+                bw=0;                
+                while(blocks_written < g_disk_transfer.writesame_count) {                    
                     blocks_to_write = blocks_per_buffer;
                     if((blocks_written + blocks_to_write) > g_disk_transfer.writesame_count) blocks_to_write = g_disk_transfer.writesame_count - blocks_written;
-                    bw += blocks_to_write * bytesPerSector;
+                    bw += blocks_to_write * bytesPerSector;                    
                     if(img.file.write(working_buffer,blocks_to_write * bytesPerSector) !=(blocks_to_write * bytesPerSector)) {
                         log("SD card write failed: ", SD.sdErrorCode());
                         scsiDev.status = CHECK_CONDITION;
@@ -1750,12 +1750,11 @@ void diskDataOut()
                         scsiDev.target->sense.asc = WRITE_ERROR_AUTO_REALLOCATION_FAILED;
                         scsiDev.phase = STATUS;
                         break;
-                    }
+                    }                    
                     blocks_written += blocks_to_write;
                     platform_reset_watchdog();
                 }                
-                g_disk_transfer.writesame_count=0;
-                log("same written:",bw);
+                g_disk_transfer.writesame_count=0;                
             }
             else {
                 if (img.file.write(buf, len) != len)

@@ -210,8 +210,11 @@ void s2s_scsiInquiry()
 			}
 		}
 	}
-
-	if(!spd_exists && !vpd_exists)  //If custom SPD was provided do not do anything.
+	
+	
+	//TODO - need to investigate this as behavior of real drive appears to be different.
+	
+	if(1)//!spd_exists && !vpd_exists)  //If custom SPD was provided do not do anything.
 	{
 		if (scsiDev.phase == DATA_IN)
 		{

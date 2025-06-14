@@ -37,6 +37,8 @@ extern "C" {
 #define PLATFORM_MAX_SCSI_SPEED S2S_CFG_SPEED_ASYNC_50
 #endif
 
+unsigned char working_buffer[52000];
+
 // This can be overridden in platform file to set the size of the transfers
 // used when reading from SCSI bus and writing to SD card.
 // When SD card access is fast, these are usually better increased.
@@ -254,6 +256,7 @@ void setNameFromImage(image_config_t &img, const char *filename) {
     memset(img.prodId, 0, 8);
     strncpy(img.prodId, image_name+8, 8);
 }
+
 
 // Set default drive vendor / product info after the image file
 // is loaded and the device type is known.
@@ -1457,6 +1460,8 @@ static struct {
     uint32_t bytes_sd; // Number of bytes that have been scheduled for transfer on SD card side
     uint32_t bytes_scsi; // Number of bytes that have been scheduled for transfer on SCSI side
 
+    uint32_t writesame_count; //
+    
     uint32_t bytes_scsi_started;
     uint32_t sd_transfer_start;
     int parityError;
@@ -1538,6 +1543,37 @@ void scsiDiskStartWrite(uint32_t lba, uint32_t blocks)
     }
 }
 
+void scsiDiskStartWriteSame(uint32_t lba, uint32_t blocks) 
+{    
+    image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
+    uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;
+    uint32_t capacity = img.file.size() / bytesPerSector;
+    
+    
+    debuglog("------ Write Same", (int)blocks, "x", (int)bytesPerSector, " starting at ", (int)lba);
+    
+    if (unlikely(((uint64_t) lba) + blocks > capacity))
+    {
+        log("WARNING: Host attempted write at sector ", (int)lba, "+", (int)blocks,
+              ", exceeding image size ", (int)capacity, " sectors (",
+              (int)bytesPerSector, "B/sector)");
+        scsiDev.status = CHECK_CONDITION;
+        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        scsiDev.target->sense.asc = LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE;
+        scsiDev.phase = STATUS;
+    }
+    else if(blocks == 0) {
+        g_disk_transfer.writesame_count=capacity - lba;            
+        scsiDiskStartWrite(lba,1);
+    }
+    else {
+        g_disk_transfer.writesame_count=blocks;    
+        scsiDiskStartWrite(lba,1);
+    }   
+
+}
+
+
 // Called to transfer next block from SCSI bus.
 // Usually called from SD card driver during waiting for SD card access.
 void diskDataOut_callback(uint32_t bytes_complete)
@@ -1590,9 +1626,16 @@ void diskDataOut()
 {
     scsiEnterPhase(DATA_OUT);
 
-    image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
+    image_config_t &img = *(image_config_t*)scsiDev.target->cfg;    
     uint32_t blockcount = (transfer.blocks - transfer.currentBlock);
     uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;
+    uint32_t i;
+    
+    uint16_t blocks_written;
+    uint16_t blocks_to_write;
+    uint16_t blocks_per_buffer;
+    uint32_t bw;
+
     g_disk_transfer.buffer = scsiDev.data;
     g_disk_transfer.bytes_scsi = blockcount * bytesPerSector;
     g_disk_transfer.bytes_sd = 0;
@@ -1660,6 +1703,8 @@ void diskDataOut()
             }
         }
 
+        len = len - (len % 520);
+
         if (len == 0)
         {
             // Nothing ready to transfer, check if we can read more from SCSI bus
@@ -1686,13 +1731,42 @@ void diskDataOut()
             g_disk_transfer.sd_transfer_start = start;
             // debuglog("SD write ", (int)start, " + ", (int)len, " ", bytearray(buf, len));
             platform_set_sd_callback(&diskDataOut_callback, buf);
-            if (img.file.write(buf, len) != len)
-            {
-                log("SD card write failed: ", SD.sdErrorCode());
-                scsiDev.status = CHECK_CONDITION;
-                scsiDev.target->sense.code = MEDIUM_ERROR;
-                scsiDev.target->sense.asc = WRITE_ERROR_AUTO_REALLOCATION_FAILED;
-                scsiDev.phase = STATUS;
+            debuglog("DiskDataOut LEN:",len);
+            if(g_disk_transfer.writesame_count) {
+                blocks_per_buffer=sizeof(working_buffer) / bytesPerSector;
+                for(i=0;i<blocks_per_buffer;i++) {
+                    memcpy(working_buffer + (i*bytesPerSector),buf,bytesPerSector);
+                }
+                blocks_written=0;
+                bw=0;
+                while(blocks_written < g_disk_transfer.writesame_count) {
+                    blocks_to_write = blocks_per_buffer;
+                    if((blocks_written + blocks_to_write) > g_disk_transfer.writesame_count) blocks_to_write = g_disk_transfer.writesame_count - blocks_written;
+                    bw += blocks_to_write * bytesPerSector;
+                    if(img.file.write(working_buffer,blocks_to_write * bytesPerSector) !=(blocks_to_write * bytesPerSector)) {
+                        log("SD card write failed: ", SD.sdErrorCode());
+                        scsiDev.status = CHECK_CONDITION;
+                        scsiDev.target->sense.code = MEDIUM_ERROR;
+                        scsiDev.target->sense.asc = WRITE_ERROR_AUTO_REALLOCATION_FAILED;
+                        scsiDev.phase = STATUS;
+                        break;
+                    }
+                    blocks_written += blocks_to_write;
+                    platform_reset_watchdog();
+                }                
+                g_disk_transfer.writesame_count=0;
+                log("same written:",bw);
+            }
+            else {
+                if (img.file.write(buf, len) != len)
+                {                    
+                    log("SD card write failed: ", SD.sdErrorCode());
+                    scsiDev.status = CHECK_CONDITION;
+                    scsiDev.target->sense.code = MEDIUM_ERROR;
+                    scsiDev.target->sense.asc = WRITE_ERROR_AUTO_REALLOCATION_FAILED;
+                    scsiDev.phase = STATUS;
+                    break;
+                }
             }
             platform_set_sd_callback(NULL, NULL);
             g_disk_transfer.bytes_sd += len;
@@ -2108,7 +2182,7 @@ int scsiDiskCommand()
         uint32_t blocks =
             (((uint32_t) scsiDev.cdb[7]) << 8) +
             scsiDev.cdb[8];
-        //scsiDiskStartWriteSame(lba,blocks);
+        scsiDiskStartWriteSame(lba, blocks);
     }
     else if (unlikely(command == 0x04))
     {

@@ -153,3 +153,6 @@ void removableInsert(image_config_t &img);
 
 // For removable, non-CD based images
 void removableEject(image_config_t &img);
+
+// AS/400 Related
+int16_t skip_next(int max);

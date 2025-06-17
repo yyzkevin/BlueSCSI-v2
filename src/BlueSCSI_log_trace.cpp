@@ -85,6 +85,7 @@ static const char *getCommandName(uint8_t cmd)
         case 0xC2: return "OMTI-5204 AssignDiskParameters";
         case 0xE0: return "Xebec RAM Diagnostic";
         case 0xE4: return "Xebec Drive Diagnostic";
+        case 0xEA: return "SkipWrite10";
         case BLUESCSI_TOOLBOX_COUNT_FILES: return "BLUESCSI_TOOLBOX_COUNT_FILES";
         case BLUESCSI_TOOLBOX_LIST_FILES: return "BLUESCSI_TOOLBOX_LIST_FILES";
         case BLUESCSI_TOOLBOX_GET_FILE: return "BLUESCSI_TOOLBOX_GET_FILE";

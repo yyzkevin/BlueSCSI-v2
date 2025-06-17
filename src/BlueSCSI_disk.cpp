@@ -1462,6 +1462,13 @@ static struct {
 
     uint32_t writesame_count; //
     
+    uint8_t  skip_mask[256];
+    uint16_t  skip_mask_length;
+    uint32_t skip_lba;
+    uint16_t skip_blocks;    
+    uint32_t skip_position;
+    uint8_t  skip_direction; //0= No Pending Skip.  1=SkipWrite 2=SkipRead.  This is needed to verify correct follow up linked command.
+    
     uint32_t bytes_scsi_started;
     uint32_t sd_transfer_start;
     int parityError;
@@ -1487,6 +1494,17 @@ void scsiDiskStartWrite(uint32_t lba, uint32_t blocks)
         // without an access time
         s2s_delay_ms(10);
     }
+    if(g_disk_transfer.skip_direction) {        
+        if((g_disk_transfer.skip_direction != 0xEA) || (lba != g_disk_transfer.skip_lba) || (blocks != g_disk_transfer.skip_blocks)) {
+            scsiDev.status = CHECK_CONDITION;
+            scsiDev.target->sense.code = ILLEGAL_REQUEST;
+            scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+            scsiDev.phase = STATUS;
+            g_disk_transfer.skip_direction=0;
+            return;
+        }        
+    }
+
 
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
     uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;
@@ -1756,7 +1774,31 @@ void diskDataOut()
                 }                
                 g_disk_transfer.writesame_count=0;                
             }
-            else {
+            else if(g_disk_transfer.skip_direction == 0xEA) {
+                int x,y;
+                uint8_t *z = buf;
+                x=len;                
+                log("Skip Write");
+                while(x) {
+                    y=skip_next(x);
+                    if(y < 0) {//skips
+                        img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
+                        log("Seek Blocks:",abs(y));
+                        log("Bytes:",(int)(abs(y) * bytesPerSector));
+                        continue;
+                    }
+                    else if(y > 0) {
+                        log("Write Blocks:",y);
+                        img.file.write(z, y * bytesPerSector);
+                        x -= y; //reduce remaing
+                        z += (y * bytesPerSector); //advance location in buffer
+                    }
+                    else {//we must be done.
+                        break;
+                    }
+                }
+            }
+            else   {
                 if (img.file.write(buf, len) != len)
                 {                    
                     log("SD card write failed: ", SD.sdErrorCode());
@@ -2072,6 +2114,78 @@ void removableEject(image_config_t &img)
     }
 }
 
+
+int skip_total_true_bits(const unsigned char *mask, size_t masklen) {
+    int total = 0;
+    for (size_t i = 0; i < masklen; i++) {
+        unsigned char val = mask[i];        
+        while (val) {
+            val &= (val - 1);
+            total++;
+        }
+    }
+    return total;
+}
+
+
+int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start) {    
+    size_t total_bits = byte_len * 8;
+    if (bit_start >= total_bits) return 0;
+
+    size_t byte_index = bit_start / 8;
+    int bit_offset = bit_start % 8;  // LSB-first
+    int target_bit = (data[byte_index] >> bit_offset) & 1;
+
+    size_t count = 0;
+    for (size_t i = bit_start; i < total_bits; i++) {
+        byte_index = i / 8;
+        bit_offset = i % 8;
+        int current_bit = (data[byte_index] >> bit_offset) & 1;
+
+        if (current_bit != target_bit) break;
+        count++;
+    }
+
+    return target_bit ? (int)count : -(int)count;
+}
+
+int16_t skip_next(int max) {
+    int16_t x;
+    if(g_disk_transfer.skip_position == (g_disk_transfer.skip_mask_length*8)) {
+        return 0;//We are finished
+    }
+    else {
+        x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);
+        if(x > max) x=max; //Maximum is to cap positive response.
+        g_disk_transfer.skip_position += abs(x);
+        return x;
+        
+    }    
+}
+
+void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip_direction) {      
+    g_disk_transfer.skip_lba = lba;
+    g_disk_transfer.skip_blocks = blocks;
+    g_disk_transfer.skip_mask_length = mask_length;
+    
+    scsiEnterPhase(DATA_OUT);
+    scsiRead(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,NULL);
+
+    if(skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length) != blocks) {    
+        scsiDev.status = CHECK_CONDITION;
+        scsiDev.target->sense.code = ILLEGAL_REQUEST;
+        scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+        scsiDev.phase = STATUS;
+        g_disk_transfer.skip_direction = 0;
+    }
+    else {
+        g_disk_transfer.skip_direction = skip_direction;        
+        g_disk_transfer.skip_position=0; 
+    }
+
+}
+
+
 /********************/
 /* Command dispatch */
 /********************/
@@ -2182,6 +2296,43 @@ int scsiDiskCommand()
             (((uint32_t) scsiDev.cdb[7]) << 8) +
             scsiDev.cdb[8];
         scsiDiskStartWriteSame(lba, blocks);
+    }
+    else if (likely(command == 0xEA) || likely(command == 0xE8)) // EA=SkipWrite10, E8=SkipRead10
+    {   
+        /*  
+        Example:   
+        0xEA - Op Code
+        0x00 - Reserved
+        0x00 - LBA
+        0x3A - LBA
+        0x9F - LBA
+        0xC0 - LBA
+        0x08 - Mask Size
+        0x00 - Blocks
+        0x02 - Blocks
+        0x01 - Linked
+        */
+
+
+        uint32_t lba =
+            (((uint32_t) scsiDev.cdb[2]) << 24) +
+            (((uint32_t) scsiDev.cdb[3]) << 16) +
+            (((uint32_t) scsiDev.cdb[4]) << 8) +
+            scsiDev.cdb[5];
+        uint32_t blocks =
+            (((uint32_t) scsiDev.cdb[7]) << 8) +
+            scsiDev.cdb[8];
+    
+        if(1==2) {//!scsiDev.cdb[0] & 1) { //This should be a linked command.
+            scsiDev.status = CHECK_CONDITION;
+            scsiDev.target->sense.code = ILLEGAL_REQUEST;
+            scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+            scsiDev.phase = STATUS;
+        }
+        else {        
+            scsiDiskSkip(lba,blocks,scsiDev.cdb[6],command);        
+        }
+
     }
     else if (unlikely(command == 0x04))
     {
@@ -2306,7 +2457,7 @@ int scsiDiskCommand()
     {
         commandHandled = 0;
     }
-
+    
     return commandHandled;
 }
 
@@ -2383,4 +2534,3 @@ void scsiDiskInit()
 {
     scsiDiskReset();
 }
-

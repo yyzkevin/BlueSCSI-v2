@@ -1976,13 +1976,42 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
     platform_set_sd_callback(&diskDataIn_callback, buffer);
 
-    if (img.file.read(buffer, count) != count)
-    {
-        log("SD card read failed: ", SD.sdErrorCode());
-        scsiDev.status = CHECK_CONDITION;
-        scsiDev.target->sense.code = MEDIUM_ERROR;
-        scsiDev.target->sense.asc = UNRECOVERED_READ_ERROR;
-        scsiDev.phase = STATUS;
+    if(g_disk_transfer.skip_direction == 0xE8) {
+        int x,y;
+        uint8_t *z = buffer;
+        x=count; 
+        uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;          
+        log("Skip Read");
+        while(x) {
+            y=skip_next(x);
+            if(y < 0) {//skips
+                img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
+                log("Seek Blocks:",abs(y));
+                log("Bytes:",(int)(abs(y) * bytesPerSector));
+                continue;
+            }
+            else if(y > 0) {
+                log("Position:",img.file.position());
+                log("Read Blocks:",y);
+                img.file.read(z, y * bytesPerSector);
+                x -= y; //reduce remaing
+                z += (y * bytesPerSector); //advance location in buffer
+            }
+            else {//we must be done.
+                break;
+            }
+        }
+    }
+    else {
+        log("regular red.");
+        if (img.file.read(buffer, count) != count)
+        {
+            log("SD card read failed: ", SD.sdErrorCode());
+            scsiDev.status = CHECK_CONDITION;
+            scsiDev.target->sense.code = MEDIUM_ERROR;
+            scsiDev.target->sense.asc = UNRECOVERED_READ_ERROR;
+            scsiDev.phase = STATUS;
+        }
     }
 
     diskDataIn_callback(count);
@@ -2065,6 +2094,8 @@ static void diskDataIn()
             g_disk_transfer.bytes_sd = bytesPerSector;
             g_disk_transfer.bytes_scsi = bytesPerSector; // Tell callback not to send to SCSI
             platform_set_sd_callback(&diskDataIn_callback, g_disk_transfer.buffer);
+            log("position2:",(int)img.file.position());
+            log("Read2:",(int)bytesPerSector);
             int status = img.file.read(g_disk_transfer.buffer, bytesPerSector);
             if (status <= 0)
             {
@@ -2171,6 +2202,8 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
     scsiEnterPhase(DATA_OUT);
     scsiRead(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,NULL);
 
+    //TODO: Verify request does not go past the end of the disk
+
     if(skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length) != blocks) {    
         scsiDev.status = CHECK_CONDITION;
         scsiDev.target->sense.code = ILLEGAL_REQUEST;
@@ -2180,7 +2213,11 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
     }
     else {
         g_disk_transfer.skip_direction = skip_direction;        
-        g_disk_transfer.skip_position=0; 
+        g_disk_transfer.skip_position=0;            
+        
+        scsiDev.msgIn=MSG_LINKED_COMMAND_COMPLETE;
+        scsiDev.phase=MESSAGE_IN;
+                
     }
 
 }
@@ -2197,7 +2234,23 @@ int scsiDiskCommand()
     int commandHandled = 1;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
 
+
+
     uint8_t command = scsiDev.cdb[0];
+    if(g_disk_transfer.skip_direction) {    
+        switch(command) {
+            case 0x08://Read6 - not sure if this should be allowed with skip
+            case 0x28://Read10
+            case 0x0A://Write6 - not sure if this should be allowed with skip
+            case 0x2A://Write10
+            //case 0x41:
+                break;
+            default://cancel out pending skip if not a read or write
+                g_disk_transfer.skip_direction=0;
+                break;
+        }
+    }
+
     if (unlikely(command == 0x1B))
     {
         // START STOP UNIT

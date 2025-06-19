@@ -39,7 +39,7 @@
 #define SCSI_OUT_MSG  20
 #define SCSI_IN_BSY  20
 
-#define SCSI_IN_RST  21
+#define SCSI_IN_RST  17   // Change from 21 which backfeeds SEL and violates BUS FREE.
 #define SCSI_OUT_RST  22  // No RST pin, manual or expander only
 
 #define SCSI_IN_ACK  26
@@ -84,11 +84,11 @@
 #define SD_SPI_CS    15
 
 // IO expander I2C
-#define GPIO_I2C_SDA 16
-#define GPIO_I2C_SCL 17
+#define GPIO_I2C_SDA 16 
+#define GPIO_I2C_SCL 16
 
 // Other pins
-#define SWO_PIN 16
+#define SWO_PIN 16 
 
 #define SCSI_ACCEL_SETPINS 0x801FF
 #define SCSI_ACCEL_SETPINS_PRE09A 0x201FF

@@ -217,7 +217,7 @@ void s2s_scsiInquiry()
 	if(1)//!spd_exists && !vpd_exists)  //If custom SPD was provided do not do anything.
 	{
 		if (scsiDev.phase == DATA_IN)
-		{
+		{			
 			// VAX workaround
 			if (allocationLength == 255 &&
 				(scsiDev.target->cfg->quirks & S2S_CFG_QUIRKS_VMS))

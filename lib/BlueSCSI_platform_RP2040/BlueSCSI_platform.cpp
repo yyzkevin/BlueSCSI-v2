@@ -178,43 +178,52 @@ void platform_init()
 
     // Determine whether I2C is supported
     // If G16 and G17 are high, this is the 2023_09a revision or later desktop board
-    gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, false, false, false,  false, true);
-    gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, false, false, false,  false, true);
-    delay(10);
-    bool d50_2023_09a = gpio_get(GPIO_I2C_SCL) && gpio_get(GPIO_I2C_SDA);
+    
+    
+    if(SCSI_IN_RST == 17) {// we are in bodge mode for AS/400
+        //do i need to setup the pin?
+        log("Configured for AS/400 (RST on GPIO16)");        
+    }
+    else {
+        gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, false, false, false,  false, true);
+        gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, false, false, false,  false, true);
+        delay(10);
+        bool d50_2023_09a = gpio_get(GPIO_I2C_SCL) && gpio_get(GPIO_I2C_SDA);
+   
 
-    if (d50_2023_09a) {
-        log("I2C Supported");
-        g_supports_initiator = true;
-        gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true, false, false,  true, true);
-        gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true, false, false,  true, true);
+        if (d50_2023_09a) {
+            log("I2C Supported");
+            g_supports_initiator = true;
+            gpio_conf(GPIO_I2C_SCL,   GPIO_FUNC_I2C, true, false, false,  true, true);
+            gpio_conf(GPIO_I2C_SDA,   GPIO_FUNC_I2C, true, false, false,  true, true);
 
-        // Use Pico SDK methods
-        gpio_set_function(GPIO_I2C_SCL, GPIO_FUNC_I2C);
-        gpio_set_function(GPIO_I2C_SDA, GPIO_FUNC_I2C);
-        // gpio_pull_up(GPIO_I2C_SCL);  // TODO necessary?
-        // gpio_pull_up(GPIO_I2C_SDA);
-    } else {
-        /* Check option switch settings */
-        // Option switches: S1 is iATN, S2 is iACK
-        gpio_conf(scsi_pins.IN_ACK,    GPIO_FUNC_SIO, true, false, false, false, false);
-        gpio_conf(scsi_pins.IN_ATN,    GPIO_FUNC_SIO, false, false, false, false, false);
-        delay(10); /// Settle time
-        // Check option switches
-        [[maybe_unused]] bool optionS1 = !gpio_get(scsi_pins.IN_ATN);
-        [[maybe_unused]] bool optionS2 = !gpio_get(scsi_pins.IN_ACK);
+            // Use Pico SDK methods
+            gpio_set_function(GPIO_I2C_SCL, GPIO_FUNC_I2C);
+            gpio_set_function(GPIO_I2C_SDA, GPIO_FUNC_I2C);
+            // gpio_pull_up(GPIO_I2C_SCL);  // TODO necessary?
+            // gpio_pull_up(GPIO_I2C_SDA);
+        } else {
+            /* Check option switch settings */
+            // Option switches: S1 is iATN, S2 is iACK
+            gpio_conf(scsi_pins.IN_ACK,    GPIO_FUNC_SIO, true, false, false, false, false);
+            gpio_conf(scsi_pins.IN_ATN,    GPIO_FUNC_SIO, false, false, false, false, false);
+            delay(10); /// Settle time
+            // Check option switches
+            [[maybe_unused]] bool optionS1 = !gpio_get(scsi_pins.IN_ATN);
+            [[maybe_unused]] bool optionS2 = !gpio_get(scsi_pins.IN_ACK);
 
-        // Reset REQ to appropriate pin for older hardware
-        scsi_pins.OUT_REQ = SCSI_OUT_REQ_BEFORE_2023_09a;
-        scsi_pins.SCSI_ACCEL_PINMASK = SCSI_ACCEL_SETPINS_PRE09A;
+            // Reset REQ to appropriate pin for older hardware
+            scsi_pins.OUT_REQ = SCSI_OUT_REQ_BEFORE_2023_09a;
+            scsi_pins.SCSI_ACCEL_PINMASK = SCSI_ACCEL_SETPINS_PRE09A;
 
-        // Initialize logging to SWO pin (UART0) 
-        gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
-        uart_init(uart0, 115200);
-        g_uart_initialized = true;
-    #ifdef MBED
-        mbed_set_error_hook(mbed_error_hook);
-    #endif
+            // Initialize logging to SWO pin (UART0) 
+            gpio_conf(SWO_PIN,        GPIO_FUNC_UART,false,false, true,  false, true);
+            uart_init(uart0, 115200);
+            g_uart_initialized = true;
+        #ifdef MBED
+            mbed_set_error_hook(mbed_error_hook);
+        #endif
+        }
     }
     // TODO Disable I2C if debug logging is enabled later?  Switch to Serial output mode?
 

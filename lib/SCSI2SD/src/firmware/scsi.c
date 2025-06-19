@@ -342,6 +342,7 @@ static void process_Command()
 	command = scsiDev.cdb[0];
 
 	// Prefer LUN's set by IDENTIFY messages for newer hosts.
+
 	if (scsiDev.lun < 0)
 	{
 		if (command == 0xE0 || command == 0xE4) // XEBEC s1410
@@ -354,6 +355,7 @@ static void process_Command()
 		}
 	}
 
+	
 
 	// For Philips P2000C with Xebec S1410 SASI/MFM adapter
 	// http://bitsavers.trailing-edge.com/pdf/xebec/104524C_S1410Man_Aug83.pdf

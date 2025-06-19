@@ -134,6 +134,9 @@ static void scsiPhyIRQ(uint gpio, uint32_t events)
         // If oSEL is in input mode, this is a real reset.  Otherwise ignore.
         scsi_rst_assert_interrupt();
     }
+    else if (gpio == 17) {//TEMP HACK
+        scsi_rst_assert_interrupt();
+    }
 }
 
 // This function is called to initialize the phy code.

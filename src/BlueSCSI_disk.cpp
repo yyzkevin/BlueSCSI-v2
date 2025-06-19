@@ -1373,6 +1373,11 @@ static bool doTestUnitReady()
 {
     bool ready = true;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
+    debuglog("what");
+    scsiDev.status = 6;
+    scsiDev.phase = STATUS;
+    return 1;
+
     if (unlikely(!scsiDev.target->started || !img.file.isOpen()))
     {
         ready = 0;
@@ -1380,7 +1385,7 @@ static bool doTestUnitReady()
         scsiDev.target->sense.code = NOT_READY;
         scsiDev.target->sense.asc = LOGICAL_UNIT_NOT_READY_INITIALIZING_COMMAND_REQUIRED;
         scsiDev.phase = STATUS;
-    }
+    }    
     else if (img.ejected)
     {
         ready = false;
@@ -2278,10 +2283,10 @@ int scsiDiskCommand()
         // TEST UNIT READY
         doTestUnitReady();
     }
-    else if (unlikely(!doTestUnitReady()))
-    {
-        // Status and sense codes already set by doTestUnitReady
-    }
+//    else if (unlikely(!doTestUnitReady()))
+//    {
+//        // Status and sense codes already set by doTestUnitReady
+//    }
     else if (likely(command == 0x08))
     {
         // READ(6)

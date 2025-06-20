@@ -1373,12 +1373,8 @@ static bool doTestUnitReady()
 {
     bool ready = true;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
-    debuglog("what");
-    scsiDev.status = 6;
-    scsiDev.phase = STATUS;
-    return 1;
-
-    if (unlikely(!scsiDev.target->started || !img.file.isOpen()))
+    
+    if (unlikely(!scsiDev.target->started || !img.file.isOpen() || 1))
     {
         ready = 0;
         scsiDev.status = CHECK_CONDITION;
@@ -2283,10 +2279,10 @@ int scsiDiskCommand()
         // TEST UNIT READY
         doTestUnitReady();
     }
-//    else if (unlikely(!doTestUnitReady()))
-//    {
-//        // Status and sense codes already set by doTestUnitReady
-//    }
+    else if (unlikely(!doTestUnitReady()))
+    {
+        // Status and sense codes already set by doTestUnitReady
+    }
     else if (likely(command == 0x08))
     {
         // READ(6)

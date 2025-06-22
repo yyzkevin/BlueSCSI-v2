@@ -8,6 +8,7 @@
 
 extern unsigned char custom_vpd[16][255];//this is the wrong place but i gave up trying to do it any other way.
 extern unsigned char custom_spd[8][255];
+extern unsigned char custom_spd2[8][255];
 
 // Use variables for version number
 #define FW_VER_NUM      "2024.12.09"

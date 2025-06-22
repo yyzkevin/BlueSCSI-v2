@@ -1374,7 +1374,7 @@ static bool doTestUnitReady()
     bool ready = true;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
     
-    if (unlikely(!scsiDev.target->started || !img.file.isOpen() || 1))
+    if (unlikely(!scsiDev.target->started || !img.file.isOpen()))
     {
         ready = 0;
         scsiDev.status = CHECK_CONDITION;
@@ -1750,7 +1750,7 @@ void diskDataOut()
             g_disk_transfer.sd_transfer_start = start;
             // debuglog("SD write ", (int)start, " + ", (int)len, " ", bytearray(buf, len));
             platform_set_sd_callback(&diskDataOut_callback, buf);
-            debuglog("DiskDataOut LEN:",len);
+            //KM//debuglog("DiskDataOut LEN:",len);
             if(g_disk_transfer.writesame_count) {
                 blocks_per_buffer=sizeof(working_buffer) / bytesPerSector;
                 for(i=0;i<blocks_per_buffer;i++) {
@@ -2095,8 +2095,8 @@ static void diskDataIn()
             g_disk_transfer.bytes_sd = bytesPerSector;
             g_disk_transfer.bytes_scsi = bytesPerSector; // Tell callback not to send to SCSI
             platform_set_sd_callback(&diskDataIn_callback, g_disk_transfer.buffer);
-            log("position2:",(int)img.file.position());
-            log("Read2:",(int)bytesPerSector);
+            //log("position2:",(int)img.file.position());
+            //log("Read2:",(int)bytesPerSector);
             int status = img.file.read(g_disk_transfer.buffer, bytesPerSector);
             if (status <= 0)
             {
@@ -2261,6 +2261,8 @@ int scsiDiskCommand()
 
         if (start)
         {
+            busy_wait_ms(13000);
+            
             if(img.deviceType == S2S_CFG_FIXED)
                 scsiDev.target->started = true;
             else

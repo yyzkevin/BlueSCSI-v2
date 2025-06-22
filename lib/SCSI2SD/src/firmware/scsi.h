@@ -112,6 +112,7 @@ typedef struct
 	uint8_t syncOffset;
 	uint8_t syncPeriod;
 
+	bool initial_check; // to keep track of startup
 	bool started; // Controlled by START STOP UNIT
 }  TargetState;
 

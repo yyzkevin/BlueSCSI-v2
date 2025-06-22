@@ -427,7 +427,34 @@ static void process_Command()
 		// REQUEST SENSE
 		uint32_t allocLength = scsiDev.cdb[4];
 
-		if (scsiDev.target->cfg->quirks == S2S_CFG_QUIRKS_XEBEC)
+		if(1) {//AS40
+			memset(scsiDev.data, 0, allocLength);
+			if(!scsiDev.target->initial_check) {
+				scsiDev.data[0]=0x70;
+				scsiDev.data[2]=0x06;
+				scsiDev.data[7]=0x18;//length
+				scsiDev.data[12]=0x29;
+				scsiDev.data[20]=0x01;
+				scsiDev.data[21]=0x41;
+				scsiDev.target->initial_check=true;
+			}
+			else {
+				scsiDev.data[0]=0x70;
+				scsiDev.data[2]=0x02;
+				scsiDev.data[7]=0x18;//length
+				scsiDev.data[12]=0x04;
+				scsiDev.data[12]=0x02;
+				scsiDev.data[20]=0x01;
+				scsiDev.data[21]=0x01;				
+			}
+			/*
+			FIRST  70 00 06 00 00 00 00 18 00 00 00 00 29 00 00 00 00 00 00 00 01 41 00 00 00 00 00 00 00 00 00 00
+			SECOND 70 00 02 00 00 00 00 18 00 00 00 00 04 02 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00
+			INDEX  00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
+			*/
+
+		}
+		else if (scsiDev.target->cfg->quirks == S2S_CFG_QUIRKS_XEBEC)
 		{
 			// Completely non-standard
 			allocLength = 4;
@@ -1351,7 +1378,7 @@ void scsiInit()
 		// won't respond properly to
 		// LOGICAL_UNIT_NOT_READY_INITIALIZING_COMMAND_REQUIRED sense
 		// code
-		scsiDev.targets[i].started = true;
+		scsiDev.targets[i].started = false;// for AS400 true;
 	}
 	firstInit = 0;
 }

@@ -266,6 +266,17 @@ bool processVpd() {
         }
         custom_spd[ids][0]=count;      
     }
+  if(ini_gets(id,"spd1", "", tmp, sizeof(tmp), CONFIGFILE)) {              
+        ptr = tmp;
+        count=0;
+        while (*ptr != '\0') {
+          custom_spd2[ids][1+(count++)] = strtol(ptr, &end, 16);
+          ptr = end;
+          while (*ptr == ' ' || *ptr == ',') ptr++;  // skip whitespace or commas
+        }
+        custom_spd[ids][0]=count;      
+    }
+
 
   }
   

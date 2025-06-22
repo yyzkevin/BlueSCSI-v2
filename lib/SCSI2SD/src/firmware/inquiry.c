@@ -125,9 +125,24 @@ void s2s_scsiInquiry()
 			const S2S_TargetCfg* config = scsiDev.target->cfg;
 			if(custom_spd[config->scsiId & 7][0]) {
 				spd_exists=1;
-				memcpy(scsiDev.data, custom_spd[config->scsiId & 7]+1, custom_spd[config->scsiId & 7][0]);
+				if(!scsiDev.target->initial_check) {
+					memcpy(scsiDev.data, custom_spd[config->scsiId & 7]+1, custom_spd[config->scsiId & 7][0]);
 					scsiDev.dataLen = custom_spd[config->scsiId & 7][0];					
 					scsiDev.phase = DATA_IN;
+				}
+				else {
+					if(custom_spd2[config->scsiId & 7][0]) {
+						memcpy(scsiDev.data, custom_spd2[config->scsiId & 7]+1, custom_spd2[config->scsiId & 7][0]);
+						scsiDev.dataLen = custom_spd2[config->scsiId & 7][0];					
+						scsiDev.phase = DATA_IN;
+					}
+					else {
+						memcpy(scsiDev.data, custom_spd[config->scsiId & 7]+1, custom_spd[config->scsiId & 7][0]);
+						scsiDev.dataLen = custom_spd[config->scsiId & 7][0];					
+						scsiDev.phase = DATA_IN;
+					}
+				}
+					
 			}
 			else {
 				scsiDev.dataLen =

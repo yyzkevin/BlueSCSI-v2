@@ -443,7 +443,7 @@ static void process_Command()
 				scsiDev.data[2]=0x02;
 				scsiDev.data[7]=0x18;//length
 				scsiDev.data[12]=0x04;
-				scsiDev.data[12]=0x02;
+				scsiDev.data[13]=0x02;
 				scsiDev.data[20]=0x01;
 				scsiDev.data[21]=0x01;				
 			}

@@ -91,6 +91,7 @@ inline void log(Params... params)
     }
     log_raw(params...);
     log_raw("\n");
+    log_raw("\r");
 }
 
 // Format a complete debug message
@@ -107,6 +108,7 @@ inline void debuglog(Params... params)
         log_raw("[", (int)millis(), "ms] DBG ");
         log_raw(params...);
         log_raw("\n");
+        log_raw("\r");
     }
 }
 

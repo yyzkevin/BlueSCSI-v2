@@ -1374,7 +1374,12 @@ static bool doTestUnitReady()
     bool ready = true;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
     
-    if (unlikely(!scsiDev.target->started || !img.file.isOpen()))
+    if(scsiDev.target->sense.code) {
+        scsiDev.status = CHECK_CONDITION;
+        scsiDev.phase = STATUS;
+        //most likely this is scsi bus reset sense code, we dont want to override it.
+    }
+    else if (unlikely(!scsiDev.target->started || !img.file.isOpen()))
     {
         ready = 0;
         scsiDev.status = CHECK_CONDITION;

@@ -427,34 +427,8 @@ static void process_Command()
 		// REQUEST SENSE
 		uint32_t allocLength = scsiDev.cdb[4];
 
-		if(1) {//AS40
-			memset(scsiDev.data, 0, allocLength);
-			if(!scsiDev.target->initial_check) {
-				scsiDev.data[0]=0x70;
-				scsiDev.data[2]=0x06;
-				scsiDev.data[7]=0x18;//length
-				scsiDev.data[12]=0x29;
-				scsiDev.data[20]=0x01;
-				scsiDev.data[21]=0x41;
-				scsiDev.target->initial_check=true;
-			}
-			else {
-				scsiDev.data[0]=0x70;
-				scsiDev.data[2]=0x02;
-				scsiDev.data[7]=0x18;//length
-				scsiDev.data[12]=0x04;
-				scsiDev.data[13]=0x02;
-				scsiDev.data[20]=0x01;
-				scsiDev.data[21]=0x01;				
-			}
-			/*
-			FIRST  70 00 06 00 00 00 00 18 00 00 00 00 29 00 00 00 00 00 00 00 01 41 00 00 00 00 00 00 00 00 00 00
-			SECOND 70 00 02 00 00 00 00 18 00 00 00 00 04 02 00 00 00 00 00 00 01 01 00 00 00 00 00 00 00 00 00 00
-			INDEX  00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31
-			*/
-
-		}
-		else if (scsiDev.target->cfg->quirks == S2S_CFG_QUIRKS_XEBEC)
+		
+		if (scsiDev.target->cfg->quirks == S2S_CFG_QUIRKS_XEBEC)
 		{
 			// Completely non-standard
 			allocLength = 4;
@@ -573,6 +547,46 @@ static void process_Command()
 					 scsiDev.target->sense.asc == LOGICAL_BLOCK_ADDRESS_OUT_OF_RANGE)
 					scsiDev.data[4] = 0x81; // File Mark detected
 			}
+		}
+		else if(1==1) //AS400
+		{
+			// As specified by the SASI and SCSI1 standard.
+			// Newer initiators won't be specifying 0 anyway.
+			if (allocLength == 0) allocLength = 4;
+
+			// If we receive a stand-alone REQUEST SENSE to a bad LUN we still need to respond
+			// with LUN not supported. SCSI-2 Spec 7.5.3.
+			if (scsiDev.lun && scsiDev.lastStatus != CHECK_CONDITION)
+			{
+				scsiDev.target->sense.code = ILLEGAL_REQUEST;
+				scsiDev.target->sense.asc = LOGICAL_UNIT_NOT_SUPPORTED;
+				transfer.lba = 0;
+			}
+			memset(scsiDev.data, 0, 256); // Max possible alloc length
+			scsiDev.data[0] = 0x70;
+			scsiDev.data[2] = scsiDev.target->sense.code & 0x0F;
+			
+			// LBA is Valid Information for direct access devices.
+			scsiDev.data[3] = transfer.lba >> 24;
+			scsiDev.data[4] = transfer.lba >> 16;
+			scsiDev.data[5] = transfer.lba >> 8;
+			scsiDev.data[6] = transfer.lba;
+			
+
+			// Additional bytes if there are errors to report
+			scsiDev.data[7] = 0x18; // additional length
+			scsiDev.data[12] = scsiDev.target->sense.asc >> 8;
+			scsiDev.data[13] = scsiDev.target->sense.asc;
+
+			if(scsiDev.target->sense.code == 0x02 && scsiDev.target->sense.asc == 0x0402) {
+				scsiDev.data[20]=1;
+				scsiDev.data[21]=1;
+			}
+			if(scsiDev.target->sense.code == 0x06 && scsiDev.target->sense.asc == 0x29) {
+				scsiDev.data[20]=1;
+				scsiDev.data[21]=0x41;
+			}
+
 		}
 		else
 		{
@@ -786,8 +800,14 @@ static void scsiReset()
 		}
 		scsiDev.target->reservedId = -1;
 		scsiDev.target->reserverId = -1;
+		
 		scsiDev.target->sense.code = NO_SENSE;
 		scsiDev.target->sense.asc = NO_ADDITIONAL_SENSE_INFORMATION;
+
+		//AS400
+		scsiDev.target->sense.code = 0x6;
+		scsiDev.target->sense.asc = 0x29;
+
 	}
 	scsiDev.target = NULL;
 
@@ -1379,6 +1399,8 @@ void scsiInit()
 		// LOGICAL_UNIT_NOT_READY_INITIALIZING_COMMAND_REQUIRED sense
 		// code
 		scsiDev.targets[i].started = false;// for AS400 true;
+		scsiDev.targets[i].sense.code = 0x6;
+		scsiDev.targets[i].sense.asc = 0x29;
 	}
 	firstInit = 0;
 }

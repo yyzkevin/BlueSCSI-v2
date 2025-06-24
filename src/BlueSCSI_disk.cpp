@@ -1494,7 +1494,7 @@ static struct {
 /*****************/
 
 void scsiDiskStartWrite(uint32_t lba, uint32_t blocks)
-{
+{    
     if (unlikely(scsiDev.target->cfg->deviceType == S2S_CFG_FLOPPY_14MB)) {
         // Floppies are supposed to be slow. Some systems can't handle a floppy
         // without an access time
@@ -1780,9 +1780,10 @@ void diskDataOut()
                 }                
                 g_disk_transfer.writesame_count=0;                
             }
-            else if(g_disk_transfer.skip_direction == 0xEA) {
+            else if(g_disk_transfer.skip_direction == 0xEA) {                
                 int x,y;
                 uint8_t *z = buf;
+                g_disk_transfer.skip_direction=0;
                 x=len;                
                 log("Skip Write");
                 while(x) {
@@ -1858,7 +1859,7 @@ void scsiDiskStartRead(uint32_t lba, uint32_t blocks)
     uint32_t capacity = img.file.size() / bytesPerSector;
 
     debuglog("------ Read ", (int)blocks, "x", (int)bytesPerSector, " starting at ", (int)lba);
-
+    
     if (unlikely(((uint64_t) lba) + blocks > capacity))
     {
         log("WARNING: Host attempted read at sector ", (int)lba, "+", (int)blocks,
@@ -1958,7 +1959,7 @@ void diskDataIn_callback(uint32_t bytes_complete)
 // Start a data in transfer using given temporary buffer.
 // diskDataIn() below divides the scsiDev.data buffer to two halves for double buffering.
 static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
-{
+{    
     g_disk_transfer.buffer = buffer;
     g_disk_transfer.bytes_scsi = 0;
     g_disk_transfer.bytes_sd = count;
@@ -1985,6 +1986,7 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
     if(g_disk_transfer.skip_direction == 0xE8) {
         int x,y;
         uint8_t *z = buffer;
+        g_disk_transfer.skip_direction =0 ;
         x=count; 
         uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;          
         log("Skip Read");
@@ -2008,8 +2010,7 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
             }
         }
     }
-    else {
-        log("regular red.");
+    else {                        
         if (img.file.read(buffer, count) != count)
         {
             log("SD card read failed: ", SD.sdErrorCode());
@@ -2239,8 +2240,7 @@ int scsiDiskCommand()
 {
     int commandHandled = 1;
     image_config_t &img = *(image_config_t*)scsiDev.target->cfg;
-
-
+   
 
     uint8_t command = scsiDev.cdb[0];
     if(g_disk_transfer.skip_direction) {    

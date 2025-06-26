@@ -2209,7 +2209,10 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
     scsiEnterPhase(DATA_OUT);
     scsiRead(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,NULL);
 
-    //TODO: Verify request does not go past the end of the disk
+    //TODO-KM: Verify request does not go past the end of the disk
+    
+    debuglog("True Bits:",skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length));
+    debuglog("Blocks:",blocks);
 
     if(skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length) != blocks) {    
         scsiDev.status = CHECK_CONDITION;
@@ -2222,8 +2225,10 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
         g_disk_transfer.skip_direction = skip_direction;        
         g_disk_transfer.skip_position=0;            
         
-        scsiDev.msgIn=MSG_LINKED_COMMAND_COMPLETE;
-        scsiDev.phase=MESSAGE_IN;
+        if(scsiDev.cdb[9] & 1) {//optional linked for testing on linux.
+            scsiDev.msgIn=MSG_LINKED_COMMAND_COMPLETE;
+            scsiDev.phase=MESSAGE_IN;
+        }
                 
     }
 
@@ -2244,6 +2249,13 @@ int scsiDiskCommand()
 
     uint8_t command = scsiDev.cdb[0];
     if(g_disk_transfer.skip_direction) {    
+        /*
+        TODO-KM:
+        If the second command is not a Write command or if the LBA of the Write
+        command    does not match the LBA of the Skip Write command, then Check
+        Condition status is returned. The sense data is set to Illegal Request-Invalid
+        Field in CDB.
+        */
         switch(command) {
             case 0x08://Read6 - not sure if this should be allowed with skip
             case 0x28://Read10
@@ -2252,7 +2264,7 @@ int scsiDiskCommand()
             //case 0x41:
                 break;
             default://cancel out pending skip if not a read or write
-                g_disk_transfer.skip_direction=0;
+                g_disk_transfer.skip_direction=0;                
                 break;
         }
     }

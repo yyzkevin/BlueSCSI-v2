@@ -1786,19 +1786,20 @@ void diskDataOut()
                 int x,y;
                 uint8_t *z = buf;
                 g_disk_transfer.skip_direction=0;
-                x=len;                
-                log("Skip Write");
+                if(len % 520 != 0) {
+                    debuglog("NOT MULTIPLE OF 520!",len);
+                }
+                x=len / bytesPerSector;                
+                debuglog("Skip Write");
                 while(x) {
                     y=skip_next(x);
                     if(y < 0) {//skips
                         img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
-                        log("Seek Blocks:",abs(y));
-                        log("Bytes:",(int)(abs(y) * bytesPerSector));
+                        debuglog("Seek Blocks:",abs(y));
                         continue;
                     }
                     else if(y > 0) {
-                        debuglog("Write Blocks:",y);
-                        debuglog("position:",img.file.position());
+                        debuglog("Write Blocks:",y);                        
                         img.file.write(z, y * bytesPerSector);
                         x -= y; //reduce remaing
                         z += (y * bytesPerSector); //advance location in buffer
@@ -1808,9 +1809,7 @@ void diskDataOut()
                     }
                 }
             }
-            else   {
-                debuglog("Write position:",img.file.position());
-                debuglog("write bytes:",len);
+            else   {                
                 if (img.file.write(buf, len) != len)
                 {                    
                     log("SD card write failed: ", SD.sdErrorCode());
@@ -1912,8 +1911,7 @@ void scsiDiskStartRead(uint32_t lba, uint32_t blocks)
 
             scsiFinishWrite();
         }
-#endif
-        debuglog("read seeking to:",(uint64_t)(transfer.lba + transfer.currentBlock) * bytesPerSector);
+#endif        
         if (!img.file.seek((uint64_t)(transfer.lba + transfer.currentBlock) * bytesPerSector))
         {
             log("Seek to ", transfer.lba, " failed for SCSI ID", (int)scsiDev.target->targetId);
@@ -1992,21 +1990,23 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
         int x,y;
         uint8_t *z = buffer;
         g_disk_transfer.skip_direction =0 ;
-        x=count; 
+                
         uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;          
-        log("Skip Read");
+        if(count % 520 != 0) {
+            debuglog("NOT MULTIPLE OF 520!",count);
+        }
+        x=count / bytesPerSector;
+        debuglog("Skip Read");
+        
         while(x) {
             y=skip_next(x);
             if(y < 0) {//skips
                 img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
-                log("Seek Blocks:",abs(y));
-                log("Bytes:",(int)(abs(y) * bytesPerSector));
+                debuglog("Seek Blocks:",abs(y));                
                 continue;
             }
-            else if(y > 0) {
-                log("Position:",img.file.position());
-                log("Read Blocks:",y);
-                debuglog("skipread pos:",img.file.position());
+            else if(y > 0) {                
+                debuglog("Read Blocks:",y);                
                 img.file.read(z, y * bytesPerSector);
                 x -= y; //reduce remaing
                 z += (y * bytesPerSector); //advance location in buffer
@@ -2016,8 +2016,7 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
             }
         }
     }
-    else {                        
-        debuglog("read pos:",img.file.position());
+    else {                                
         if (img.file.read(buffer, count) != count)
         {
             log("SD card read failed: ", SD.sdErrorCode());

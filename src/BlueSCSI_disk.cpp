@@ -1500,6 +1500,7 @@ void scsiDiskStartWrite(uint32_t lba, uint32_t blocks)
         // without an access time
         s2s_delay_ms(10);
     }
+
     if(g_disk_transfer.skip_direction) {        
         if((g_disk_transfer.skip_direction != 0xEA) || (lba != g_disk_transfer.skip_lba) || (blocks != g_disk_transfer.skip_blocks)) {
             scsiDev.status = CHECK_CONDITION;
@@ -1738,7 +1739,7 @@ void diskDataOut()
         {
             // Finalize transfer on SCSI side
             scsiFinishRead(&scsiDev.data[start], len, &g_disk_transfer.parityError);
-
+            
             // Check parity error status before writing to SD card
             if (g_disk_transfer.parityError && (scsiDev.boardCfg.flags & S2S_CFG_ENABLE_PARITY))
             {
@@ -1784,13 +1785,13 @@ void diskDataOut()
             }
             else if(g_disk_transfer.skip_direction == 0xEA) {                
                 int x,y;
-                uint8_t *z = buf;
-                g_disk_transfer.skip_direction=0;
+                uint8_t *z = buf;                
                 if(len % 520 != 0) {
                     debuglog("NOT MULTIPLE OF 520!",len);
                 }
                 x=len / bytesPerSector;                
                 debuglog("Skip Write");
+                debuglog("Available Blocks:",x);
                 while(x) {
                     y=skip_next(x);
                     if(y < 0) {//skips
@@ -1809,7 +1810,8 @@ void diskDataOut()
                     }
                 }
             }
-            else   {                
+            else   {              
+                debuglog("Normal Write:",len);
                 if (img.file.write(buf, len) != len)
                 {                    
                     log("SD card write failed: ", SD.sdErrorCode());
@@ -1833,6 +1835,11 @@ void diskDataOut()
 
     // Release SCSI bus
     scsiFinishRead(NULL, 0, &g_disk_transfer.parityError);
+    if(g_disk_transfer.skip_direction) {
+        debuglog("Write Finished, End Skip");
+        g_disk_transfer.skip_direction=0;
+    }
+    
 
     transfer.currentBlock += blockcount;
     scsiDev.dataPtr = scsiDev.dataLen = 0;
@@ -1910,6 +1917,10 @@ void scsiDiskStartRead(uint32_t lba, uint32_t blocks)
             }
 
             scsiFinishWrite();
+            if(g_disk_transfer.skip_direction) {
+                g_disk_transfer.skip_direction=0;
+                debuglog("done write, set skipdir to 0");
+            }
         }
 #endif        
         if (!img.file.seek((uint64_t)(transfer.lba + transfer.currentBlock) * bytesPerSector))
@@ -1989,8 +2000,7 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
     if(g_disk_transfer.skip_direction == 0xE8) {
         int x,y;
         uint8_t *z = buffer;
-        g_disk_transfer.skip_direction =0 ;
-                
+                        
         uint32_t bytesPerSector = scsiDev.target->liveCfg.bytesPerSector;          
         if(count % 520 != 0) {
             debuglog("NOT MULTIPLE OF 520!",count);
@@ -2132,6 +2142,10 @@ static void diskDataIn()
         }
 
         scsiFinishWrite();
+        if(g_disk_transfer.skip_direction) {
+            g_disk_transfer.skip_direction=0;
+            debuglog("Read Finished, Skip End");
+        }        
     }
 }
 
@@ -2218,11 +2232,8 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
     scsiEnterPhase(DATA_OUT);
     scsiRead(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,NULL);
 
-    //TODO-KM: Verify request does not go past the end of the disk
+    //TODO-KM: Verify request does not go past the end of the disk    
     
-    debuglog("True Bits:",skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length));
-    debuglog("Blocks:",blocks);
-
     if(skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length) != blocks) {    
         scsiDev.status = CHECK_CONDITION;
         scsiDev.target->sense.code = ILLEGAL_REQUEST;
@@ -2268,12 +2279,18 @@ int scsiDiskCommand()
         switch(command) {
             case 0x08://Read6 - not sure if this should be allowed with skip
             case 0x28://Read10
+                if(g_disk_transfer.skip_direction == 0xE8) break;
             case 0x0A://Write6 - not sure if this should be allowed with skip
             case 0x2A://Write10
-            //case 0x41:
-                break;
+                if(g_disk_transfer.skip_direction == 0xEA) break;                
             default://cancel out pending skip if not a read or write
                 g_disk_transfer.skip_direction=0;                
+                scsiDev.status = CHECK_CONDITION;
+                scsiDev.target->sense.code = ILLEGAL_REQUEST;
+                scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
+                scsiDev.phase = STATUS;
+                debuglog("We Failed Here!");
+                return 0;
                 break;
         }
     }

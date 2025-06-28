@@ -1793,8 +1793,8 @@ void diskDataOut()
                 debuglog("Skip Write");
                 debuglog("Available Blocks:",x);
                 while(x) {
-                    y=skip_next(x);
-                    if(y < 0) {//skips
+                    y=skip_next(x);                    
+                    if(y < 0) {//skips                        
                         img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
                         debuglog("Seek Blocks:",abs(y));
                         continue;
@@ -2217,6 +2217,15 @@ int16_t skip_next(int max) {
     }
     else {
         x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);
+        if(x < 0 && g_disk_transfer.skip_position ==0 ) {
+            /*****************************************************************
+             * THIS IS TESTING A THEORY ONLY AND LIKELY NEEDS TO BE REMOVED! *
+             *****************************************************************/
+            debuglog("Ignoring prefix skips:",abs(x));
+            g_disk_transfer.skip_position += abs(x);
+            
+            x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);
+        }
         if(x > max) x=max; //Maximum is to cap positive response.
         g_disk_transfer.skip_position += abs(x);
         return x;

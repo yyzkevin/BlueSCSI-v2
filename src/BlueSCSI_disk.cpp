@@ -1787,35 +1787,27 @@ void diskDataOut()
                 int x,y;
                 uint8_t *z = buf;                
                 if(len % 520 != 0) {
-                    debuglog("NOT MULTIPLE OF 520!",len);
+                    log("SKIP: NOT MULTIPLE OF 520!",len);
                 }
                 x=len / bytesPerSector;                
-                debuglog("Skip Write");
-                debuglog("Available Blocks:",x);
-                debuglog("Start Position:",img.file.position());
-
+                
                 while(x) {
                     y=skip_next(x);                    
                     if(y < 0) {//skips                        
-                        img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
-                        debuglog("Seek Blocks:",abs(y));
+                        img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                                                
                         continue;
                     }
-                    else if(y > 0) {
-                        debuglog("Write Blocks:",y);                        
+                    else if(y > 0) {                        
                         img.file.write(z, y * bytesPerSector);
                         x -= y; //reduce remaing
                         z += (y * bytesPerSector); //advance location in buffer
                     }
                     else {//we must be done.
                         break;
-                    }
-                    debuglog("End Position:",img.file.position());
+                    }                    
                 }
             }
             else   {              
-                debuglog("Normal Write:",len);
-                debuglog("Postion:",img.file.position());
                 if (img.file.write(buf, len) != len)
                 {                    
                     log("SD card write failed: ", SD.sdErrorCode());
@@ -1839,8 +1831,7 @@ void diskDataOut()
 
     // Release SCSI bus
     scsiFinishRead(NULL, 0, &g_disk_transfer.parityError);
-    if(g_disk_transfer.skip_direction) {
-        debuglog("Write Finished, End Skip");
+    if(g_disk_transfer.skip_direction) {        
         g_disk_transfer.skip_direction=0;
     }
     
@@ -1922,8 +1913,7 @@ void scsiDiskStartRead(uint32_t lba, uint32_t blocks)
 
             scsiFinishWrite();
             if(g_disk_transfer.skip_direction) {
-                g_disk_transfer.skip_direction=0;
-                debuglog("done write, set skipdir to 0");
+                g_disk_transfer.skip_direction=0;                
             }
         }
 #endif        
@@ -2010,17 +2000,14 @@ static void start_dataInTransfer(uint8_t *buffer, uint32_t count)
             debuglog("NOT MULTIPLE OF 520!",count);
         }
         x=count / bytesPerSector;
-        debuglog("Skip Read");
-        
+                
         while(x) {
             y=skip_next(x);
             if(y < 0) {//skips
-                img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                        
-                debuglog("Seek Blocks:",abs(y));                
+                img.file.seek(img.file.position() + (abs(y) * bytesPerSector));                                                      
                 continue;
             }
-            else if(y > 0) {                
-                debuglog("Read Blocks:",y);                
+            else if(y > 0) {                           
                 img.file.read(z, y * bytesPerSector);
                 x -= y; //reduce remaing
                 z += (y * bytesPerSector); //advance location in buffer
@@ -2121,11 +2108,7 @@ static void diskDataIn()
             g_disk_transfer.bytes_sd = bytesPerSector;
             g_disk_transfer.bytes_scsi = bytesPerSector; // Tell callback not to send to SCSI
             platform_set_sd_callback(&diskDataIn_callback, g_disk_transfer.buffer);
-            //log("position2:",(int)img.file.position());
-            //log("Read2:",(int)bytesPerSector);
-            debuglog("prefetch position:",img.file.position());
-            debuglog("prefetching:",bytesPerSector);
-    
+            
             int status = img.file.read(g_disk_transfer.buffer, bytesPerSector);
             if (status <= 0)
             {
@@ -2147,8 +2130,7 @@ static void diskDataIn()
 
         scsiFinishWrite();
         if(g_disk_transfer.skip_direction) {
-            g_disk_transfer.skip_direction=0;
-            debuglog("Read Finished, Skip End");
+            g_disk_transfer.skip_direction=0;            
         }        
     }
 }
@@ -2181,43 +2163,21 @@ void removableEject(image_config_t &img)
 
 
 int skip_total_true_bits(const unsigned char *mask, size_t masklen) {
-    int total = 0;
-    debuglog("Mask Start");
-    for (size_t i = 0; i < masklen; i++) {
-        debuglog(mask[i]);
+    int total = 0;    
+    for (size_t i = 0; i < masklen; i++) {        
         unsigned char val = mask[i];        
         while (val) {
             val &= (val - 1);
             total++;
         }
-    }
-    debuglog("Mask End");
+    }    
     return total;
 }
 
-/*
+
 int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start) {    
-    size_t total_bits = byte_len * 8;
-    if (bit_start >= total_bits) return 0;
-
-    size_t byte_index = bit_start / 8;
-    int bit_offset = bit_start % 8;  // LSB-first
-    int target_bit = (data[byte_index] >> bit_offset) & 1;
-
-    size_t count = 0;
-    for (size_t i = bit_start; i < total_bits; i++) {
-        byte_index = i / 8;
-        bit_offset = i % 8;
-        int current_bit = (data[byte_index] >> bit_offset) & 1;
-
-        if (current_bit != target_bit) break;
-        count++;
-    }
-
-    return target_bit ? (int)count : -(int)count;
-}
-*/
-int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start) {    
+    //|Byte 0         |Byte 1         |Byte 2         |
+    // 7 6 5 4 3 2 1 0 7 6 5 4 3 2 1 0 7 6 5 4 3 2 1 0
     size_t total_bits = byte_len * 8;
     if (bit_start >= total_bits) return 0;
 
@@ -2316,8 +2276,7 @@ int scsiDiskCommand()
                 scsiDev.status = CHECK_CONDITION;
                 scsiDev.target->sense.code = ILLEGAL_REQUEST;
                 scsiDev.target->sense.asc = INVALID_FIELD_IN_CDB;
-                scsiDev.phase = STATUS;
-                debuglog("We Failed Here!");
+                scsiDev.phase = STATUS;                
                 return 0;
                 break;
         }

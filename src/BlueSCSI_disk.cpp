@@ -1792,6 +1792,8 @@ void diskDataOut()
                 x=len / bytesPerSector;                
                 debuglog("Skip Write");
                 debuglog("Available Blocks:",x);
+                debuglog("Start Position:",img.file.position());
+
                 while(x) {
                     y=skip_next(x);                    
                     if(y < 0) {//skips                        
@@ -1808,10 +1810,12 @@ void diskDataOut()
                     else {//we must be done.
                         break;
                     }
+                    debuglog("End Position:",img.file.position());
                 }
             }
             else   {              
                 debuglog("Normal Write:",len);
+                debuglog("Postion:",img.file.position());
                 if (img.file.write(buf, len) != len)
                 {                    
                     log("SD card write failed: ", SD.sdErrorCode());
@@ -2178,17 +2182,20 @@ void removableEject(image_config_t &img)
 
 int skip_total_true_bits(const unsigned char *mask, size_t masklen) {
     int total = 0;
+    debuglog("Mask Start");
     for (size_t i = 0; i < masklen; i++) {
+        debuglog(mask[i]);
         unsigned char val = mask[i];        
         while (val) {
             val &= (val - 1);
             total++;
         }
     }
+    debuglog("Mask End");
     return total;
 }
 
-
+/*
 int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start) {    
     size_t total_bits = byte_len * 8;
     if (bit_start >= total_bits) return 0;
@@ -2209,6 +2216,27 @@ int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start)
 
     return target_bit ? (int)count : -(int)count;
 }
+*/
+int skip_contiguous_bits(const uint8_t *data, size_t byte_len, size_t bit_start) {    
+    size_t total_bits = byte_len * 8;
+    if (bit_start >= total_bits) return 0;
+
+    size_t byte_index = bit_start / 8;
+    int bit_offset = 7 - (bit_start % 8);  // MSB-first
+    int target_bit = (data[byte_index] >> bit_offset) & 1;
+
+    size_t count = 0;
+    for (size_t i = bit_start; i < total_bits; i++) {
+        byte_index = i / 8;
+        bit_offset = 7 - (i % 8);  // MSB-first
+        int current_bit = (data[byte_index] >> bit_offset) & 1;
+
+        if (current_bit != target_bit) break;
+        count++;
+    }
+
+    return target_bit ? (int)count : -(int)count;
+}
 
 int16_t skip_next(int max) {
     int16_t x;
@@ -2216,16 +2244,7 @@ int16_t skip_next(int max) {
         return 0;//We are finished
     }
     else {
-        x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);
-        if(x < 0 && g_disk_transfer.skip_position ==0 ) {
-            /*****************************************************************
-             * THIS IS TESTING A THEORY ONLY AND LIKELY NEEDS TO BE REMOVED! *
-             *****************************************************************/
-            debuglog("Ignoring prefix skips:",abs(x));
-            g_disk_transfer.skip_position += abs(x);
-            
-            x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);
-        }
+        x=skip_contiguous_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,g_disk_transfer.skip_position);        
         if(x > max) x=max; //Maximum is to cap positive response.
         g_disk_transfer.skip_position += abs(x);
         return x;
@@ -2240,7 +2259,7 @@ void scsiDiskSkip(uint32_t lba, uint32_t blocks,uint8_t mask_length,uint8_t skip
     
     scsiEnterPhase(DATA_OUT);
     scsiRead(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length,NULL);
-
+    
     //TODO-KM: Verify request does not go past the end of the disk    
     
     if(skip_total_true_bits(g_disk_transfer.skip_mask,g_disk_transfer.skip_mask_length) != blocks) {    

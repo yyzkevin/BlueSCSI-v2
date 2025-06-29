@@ -284,7 +284,7 @@ static void doModeSense(
 	////////////// Mode Parameter Header
 	////////////////////////////////////
 
-	if(1) { //as400
+	if(1==2) { //as400
 		/*
 		if(!sixByteCmd) {				
 			scsiDev.status = CHECK_CONDITION;		
@@ -638,7 +638,7 @@ static void doModeSelect(void)
 	{
 		// scsiDev.dataLen bytes are in scsiDev.data
 
-		if(1) {//as400
+		if(1==2) {//as400
 			goto out;
 		}
 

@@ -283,7 +283,6 @@ static void doModeSense(
 {
 	////////////// Mode Parameter Header
 	////////////////////////////////////
-
 	if(1==2) { //as400
 		/*
 		if(!sixByteCmd) {				
